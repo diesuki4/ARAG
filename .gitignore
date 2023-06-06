@@ -1,0 +1,57 @@
+# Ignore all files by default, but scan all directories.
+*
+!*/
+
+# Do not ignore git files in the root of the repo.
+!/.git*
+
+# Do not ignore Markdown files.
+!*.md
+
+# Do not ignore `.uproject`.
+!*.uproject
+
+# Do not ignore `.uplugin`.
+!*.uplugin
+
+# Do not ignore Source, Config and Plugins dirs.
+!/Source/**
+!/Config/**
+!/Plugins/**/Source/**
+!/Plugins/**/Config/**
+
+# Do not ignore `.umap` files from Content dir.
+!/Content/**/*.umap
+!/Plugins/**/Content/**/*.umap
+
+# Do not ignore Built data for maps from Content dir.
+!/Content/**/*_BuiltData.uasset
+!/Plugins/**/Content/**/*_BuiltData.uasset
+
+# OS/platform generated files.
+
+# Windows
+ehthumbs.db
+Thumbs.db
+
+# Mac OS X
+.DS_Store
+.DS_Store?
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+
+# vim
+[._]*.s[a-w][a-z]
+[._]s[a-w][a-z]
+*.un~
+Session.vim
+.netrwhist
+
+# Visual Studio
+.vs
+.vsconfig
