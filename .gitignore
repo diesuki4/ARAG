@@ -20,13 +20,13 @@
 !/Plugins/**/Source/**
 !/Plugins/**/Config/**
 
-# Do not ignore `.umap` files from Content dir.
-!/Content/**/*.umap
-!/Plugins/**/Content/**/*.umap
+# Allow any files from Content dir.
+!/Content/**/*
+!/Plugins/**/Content/**/*
 
-# Do not ignore Built data for maps from Content dir.
-!/Content/**/*_BuiltData.uasset
-!/Plugins/**/Content/**/*_BuiltData.uasset
+# Allow any files from RawContent dir.
+!/RawContent/**/*
+!/Plugins/**/RawContent/**/*
 
 # OS/platform generated files.
 
@@ -55,3 +55,5 @@ Session.vim
 # Visual Studio
 .vs
 .vsconfig
+
+# Oversized files
