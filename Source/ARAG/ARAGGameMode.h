@@ -2,7 +2,7 @@
 
 #pragma once
 
-#include "CoreMinimal.h"
+#include "ARAG.h"
 #include "GameFramework/GameModeBase.h"
 #include "ARAGGameMode.generated.h"
 

@@ -10,11 +10,17 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 
+#include "AbilitySystem/AttributeSets/AR_AttributeSetBase.h"
+#include "AbilitySystemBlueprintLibrary.h"
+#include "DataAssets/CharacterDataAsset.h"
+#include "Net/UnrealNetwork.h"
+#include "ActorComponents/AR_CharacterMovementComponent.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AARAGCharacter
 
-AARAGCharacter::AARAGCharacter()
+AARAGCharacter::AARAGCharacter(const FObjectInitializer& ObjectInitializer) :
+	Super(ObjectInitializer.SetDefaultSubobjectClass<UAR_CharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
 	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
@@ -49,6 +55,39 @@ AARAGCharacter::AARAGCharacter()
 
 	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
 	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+
+	// Ability System
+	AbilitySystemComponent = CreateDefaultSubobject<UAR_AbilitySystemComponentBase>(TEXT("AbilitySystemComponent"));
+	AbilitySystemComponent->SetIsReplicated(true);
+	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+
+	AttributeSet = CreateDefaultSubobject<UAR_AttributeSetBase>(TEXT("AttributeSet"));
+}
+
+void AARAGCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	ARCHECK(IsValid(CharacterDataAsset));
+
+	SetCharacterData(CharacterDataAsset->CharacterData);
+}
+
+void AARAGCharacter::PossessedBy(AController* NewController)
+{
+	Super::PossessedBy(NewController);
+
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+
+	GiveAbilities();
+	ApplyStartupEffects();
+}
+
+void AARAGCharacter::OnRep_PlayerState()
+{
+	Super::OnRep_PlayerState();
+
+	AbilitySystemComponent->InitAbilityActorInfo(this, this);
 }
 
 void AARAGCharacter::BeginPlay()
@@ -56,14 +95,6 @@ void AARAGCharacter::BeginPlay()
 	// Call the base class  
 	Super::BeginPlay();
 
-	//Add Input Mapping Context
-	if (APlayerController* PlayerController = Cast<APlayerController>(Controller))
-	{
-		if (UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer()))
-		{
-			Subsystem->AddMappingContext(DefaultMappingContext, 0);
-		}
-	}
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -72,58 +103,138 @@ void AARAGCharacter::BeginPlay()
 void AARAGCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
 	// Set up action bindings
-	if (UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent)) {
-		
-		//Jumping
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
-		EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
+	ARCHECK(EnhancedInputComponent != nullptr);
 
-		//Moving
-		EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AARAGCharacter::Move);
+	//Jumping
+	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
+	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
-		//Looking
-		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AARAGCharacter::Look);
+	//Moving
+	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AARAGCharacter::Move);
 
-	}
-
+	//Looking
+	EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AARAGCharacter::Look);
 }
 
 void AARAGCharacter::Move(const FInputActionValue& Value)
 {
+	ARCHECK(Controller != nullptr);
+
 	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	if (Controller != nullptr)
-	{
-		// find out which way is forward
-		const FRotator Rotation = Controller->GetControlRotation();
-		const FRotator YawRotation(0, Rotation.Yaw, 0);
+	// find out which way is forward
+	const FRotator Rotation = Controller->GetControlRotation();
+	const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-		// get forward vector
-		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+	// get forward vector
+	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
 	
-		// get right vector 
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+	// get right vector 
+	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		// add movement 
-		AddMovementInput(ForwardDirection, MovementVector.Y);
-		AddMovementInput(RightDirection, MovementVector.X);
-	}
+	// add movement 
+	AddMovementInput(ForwardDirection, MovementVector.Y);
+	AddMovementInput(RightDirection, MovementVector.X);
 }
 
 void AARAGCharacter::Look(const FInputActionValue& Value)
 {
+	ARCHECK(Controller != nullptr);
+
 	// input is a Vector2D
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
 
-	if (Controller != nullptr)
+	// add yaw and pitch input to controller
+	AddControllerYawInput(LookAxisVector.X);
+	AddControllerPitchInput(LookAxisVector.Y);
+}
+/*
+UAbilitySystemComponent* AARAGCharacter::GetAbilitySystemComponent() const
+{
+	return AbilitySystemComponent;
+}
+*/
+void AARAGCharacter::PawnClientRestart()
+{
+	Super::PawnClientRestart();
+
+	//Add Input Mapping Context
+	APlayerController* PlayerController = Cast<APlayerController>(Controller);
+	ARCHECK(PlayerController != nullptr);
+
+	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer());
+	ARCHECK(Subsystem != nullptr);
+
+	Subsystem->ClearAllMappings();
+	Subsystem->AddMappingContext(DefaultMappingContext, 0);
+}
+
+bool AARAGCharacter::ApplyGameplayEffectToSelf(TSubclassOf<UGameplayEffect> Effect, FGameplayEffectContextHandle InEffectContext)
+{
+	ARCHECK(Effect.Get(), false);
+
+	FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(Effect, 1, InEffectContext);
+	ARCHECK(SpecHandle.IsValid(), false);
+
+	FActiveGameplayEffectHandle ActiveGEHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
+
+	return ActiveGEHandle.WasSuccessfullyApplied();
+}
+
+void AARAGCharacter::GiveAbilities()
+{
+	ARCHECK(AbilitySystemComponent);
+
+	if (HasAuthority())
 	{
-		// add yaw and pitch input to controller
-		AddControllerYawInput(LookAxisVector.X);
-		AddControllerPitchInput(LookAxisVector.Y);
+		for (auto DefaultAbility : CharacterData.Abilities)
+		{
+			AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(DefaultAbility));
+		}
 	}
 }
 
+void AARAGCharacter::ApplyStartupEffects()
+{
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
+		EffectContext.AddSourceObject(this);
 
+		for (auto CharacterEffect : CharacterData.Effects)
+		{
+			ApplyGameplayEffectToSelf(CharacterEffect, EffectContext);
+		}
+	}
+}
 
+FCharacterData AARAGCharacter::GetCharacterData() const
+{
+	return CharacterData;
+}
 
+void AARAGCharacter::SetCharacterData(const FCharacterData& InCharacterData)
+{
+	CharacterData = InCharacterData;
+
+	InitFromCharacterData(CharacterData);
+}
+
+void AARAGCharacter::OnRep_CharacterData()
+{
+	InitFromCharacterData(CharacterData, true);
+}
+
+void AARAGCharacter::InitFromCharacterData(const FCharacterData& InCharacterData, bool bFromReplication)
+{
+
+}
+
+void AARAGCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
+{
+	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME(AARAGCharacter, CharacterData);
+}
