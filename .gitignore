@@ -55,6 +55,7 @@ Session.vim
 # Visual Studio
 .vs
 .vsconfig
+!/.editorconfig
 
 # Oversized files
 /Content/ParagonGideon/**
