@@ -8,14 +8,15 @@
 #include "Abilities/GameplayAbility.h"
 #include "AbilitySystem/Components/AR_AbilitySystemComponentBase.h"
 #include "InputActionValue.h"
-#include "ARAGTypes.h"
+#include "ARAGTypes/CharacterData.h"
 #include "ARAGCharacter.generated.h"
 
 class UGameplayEffect;
 class UGameplayAbility;
-
 class UAR_AttributeSetBase;
+class UAR_CombatComponent;
 
+/* 메인 캐릭터 */
 UCLASS(config=Game)
 class AARAGCharacter : public ACharacter, public IAbilitySystemInterface
 {
@@ -38,8 +39,13 @@ class AARAGCharacter : public ACharacter, public IAbilitySystemInterface
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
 	class UInputAction* LookAction;
+    // 마우스 좌버튼 입력
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+	class UInputAction* LfMouseAction;
+    // 마우스 우버튼 입력
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
+    class UInputAction* RtMouseAction;
 
-// 기본 캐릭터
 public:
 	AARAGCharacter(const FObjectInitializer& ObjectInitializer);
 
@@ -59,8 +65,17 @@ protected:
 
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
+    void LfMousePressed();
+    void LfMouseReleased();
+    void RtMousePressed();
 
-// GAS
+public:
+    UPROPERTY(VisibleAnywhere)
+    UAR_CombatComponent* CombatComponent;
+
+    UAR_CombatComponent* GetCombatComponent() { return CombatComponent; }
+
+/* GAS */
 public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override { return AbilitySystemComponent; }
 
@@ -68,15 +83,15 @@ public:
 
 protected:
 	UPROPERTY(EditDefaultsOnly)
-		UAR_AbilitySystemComponentBase* AbilitySystemComponent;
+	UAR_AbilitySystemComponentBase* AbilitySystemComponent;
 
 	UPROPERTY(Transient)
-		UAR_AttributeSetBase* AttributeSet;
+	UAR_AttributeSetBase* AttributeSet;
 
-	void GiveAbilities();
-	void ApplyStartupEffects();
+	void GiveAbilities();           // 캐릭터 데이터로부터 기본 능력 부여
+	void ApplyStartupEffects();     // 캐릭터 데이터로부터 기본 이펙트 적용
 
-// 캐릭터 데이터
+/* 캐릭터 데이터 */
 public:
 	UFUNCTION(BlueprintCallable)
 	FCharacterData GetCharacterData() const;
@@ -85,6 +100,10 @@ public:
 	void SetCharacterData(const FCharacterData& InCharacterData);
 
 protected:
+    // 기본 캐릭터 데이터 에셋
+    UPROPERTY(EditDefaultsOnly)
+    class UCharacterDataAsset* CharacterDataAsset;
+    // 현재 캐릭터 데이터
 	UPROPERTY(ReplicatedUsing = OnRep_CharacterData)
 	FCharacterData CharacterData;
 
@@ -92,7 +111,4 @@ protected:
 	void OnRep_CharacterData();
 
 	virtual void InitFromCharacterData(const FCharacterData& InCharacterData, bool bFromReplication = false);
-
-	UPROPERTY(EditDefaultsOnly)
-	class UCharacterDataAsset* CharacterDataAsset;
 };

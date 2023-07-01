@@ -6,6 +6,7 @@
 #include "GameFramework/GameModeBase.h"
 #include "ARAGGameMode.generated.h"
 
+/* 게임 모드 */
 UCLASS(minimalapi)
 class AARAGGameMode : public AGameModeBase
 {
@@ -14,6 +15,3 @@ class AARAGGameMode : public AGameModeBase
 public:
 	AARAGGameMode();
 };
-
-
-

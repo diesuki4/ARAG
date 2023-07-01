@@ -15,48 +15,49 @@
 #include "DataAssets/CharacterDataAsset.h"
 #include "Net/UnrealNetwork.h"
 #include "ActorComponents/AR_CharacterMovementComponent.h"
-
-//////////////////////////////////////////////////////////////////////////
-// AARAGCharacter
+#include "ActorComponents/AR_CombatComponent.h"
+#include "AR_PlayerController.h"
+#include "ARAGTypes/InputMappingPriority.h"
+#include "Actors/Weapon//WeaponBase.h"
 
 AARAGCharacter::AARAGCharacter(const FObjectInitializer& ObjectInitializer) :
 	Super(ObjectInitializer.SetDefaultSubobjectClass<UAR_CharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
 {
-	// Set size for collision capsule
 	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
 		
-	// Don't rotate when the controller rotates. Let that just affect the camera.
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
-	// Configure character movement
-	GetCharacterMovement()->bOrientRotationToMovement = true; // Character moves in the direction of input...	
-	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f); // ...at this rotation rate
+	GetCharacterMovement()->bOrientRotationToMovement = true;
+	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
 
-	// Note: For faster iteration times these variables, and many more, can be tweaked in the Character Blueprint
-	// instead of recompiling to adjust them
 	GetCharacterMovement()->JumpZVelocity = 700.f;
 	GetCharacterMovement()->AirControl = 0.35f;
 	GetCharacterMovement()->MaxWalkSpeed = 500.f;
 	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
 	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
 
-	// Create a camera boom (pulls in towards the player if there is a collision)
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 400.0f; // The camera follows at this distance behind the character	
-	CameraBoom->bUsePawnControlRotation = true; // Rotate the arm based on the controller
+	CameraBoom->TargetArmLength = 400.0f;
+	CameraBoom->bUsePawnControlRotation = true;
+    CameraBoom->SetRelativeLocation(FVector(30.f, 0.f, 200.f));
 
-	// Create a follow camera
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
-	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
-	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
+	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
+	FollowCamera->bUsePawnControlRotation = false;
+    FollowCamera->SetRelativeRotation(FRotator(-20.0f, 0.0f, 0.0f));
 
-	// Note: The skeletal mesh and anim blueprint references on the Mesh component (inherited from Character) 
-	// are set in the derived blueprint asset named ThirdPersonCharacter (to avoid direct content references in C++)
+    static ConstructorHelpers::FObjectFinder<USkeletalMesh> SK_GIDEON(TEXT("SkeletalMesh'/Game/ParagonGideon/Characters/Heroes/Gideon/Skins/Mephisto/Meshes/Gideon_Mephisto.Gideon_Mephisto'"));
 
-	// Ability System
+    if (SK_GIDEON.Succeeded())
+    {
+        GetMesh()->SetSkeletalMesh(SK_GIDEON.Object);
+    }
+
+    CombatComponent = CreateDefaultSubobject<UAR_CombatComponent>(TEXT("Combat"));
+
 	AbilitySystemComponent = CreateDefaultSubobject<UAR_AbilitySystemComponentBase>(TEXT("AbilitySystemComponent"));
 	AbilitySystemComponent->SetIsReplicated(true);
 	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
@@ -79,7 +80,9 @@ void AARAGCharacter::PossessedBy(AController* NewController)
 
 	AbilitySystemComponent->InitAbilityActorInfo(this, this);
 
+    // 데이터 에셋으로부터 기본 캐릭터 능력 부여
 	GiveAbilities();
+    // 데이터 에셋으로부터 기본 캐릭터 이펙트 적용
 	ApplyStartupEffects();
 }
 
@@ -92,49 +95,42 @@ void AARAGCharacter::OnRep_PlayerState()
 
 void AARAGCharacter::BeginPlay()
 {
-	// Call the base class  
-	Super::BeginPlay();
+    Super::BeginPlay();
 
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Input
-
 void AARAGCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
 {
-	// Set up action bindings
 	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
 	ARCHECK(EnhancedInputComponent != nullptr);
 
-	//Jumping
-	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Triggered, this, &ACharacter::Jump);
+	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
 	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 
-	//Moving
 	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AARAGCharacter::Move);
 
-	//Looking
 	EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AARAGCharacter::Look);
+
+    EnhancedInputComponent->BindAction(LfMouseAction, ETriggerEvent::Started, this, &AARAGCharacter::LfMousePressed);
+
+    EnhancedInputComponent->BindAction(LfMouseAction, ETriggerEvent::Completed, this, &AARAGCharacter::LfMouseReleased);
+
+    EnhancedInputComponent->BindAction(RtMouseAction, ETriggerEvent::Started, this, &AARAGCharacter::RtMousePressed);
 }
 
 void AARAGCharacter::Move(const FInputActionValue& Value)
 {
 	ARCHECK(Controller != nullptr);
 
-	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
 
-	// find out which way is forward
 	const FRotator Rotation = Controller->GetControlRotation();
 	const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-	// get forward vector
 	const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	
-	// get right vector 
+
 	const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-	// add movement 
 	AddMovementInput(ForwardDirection, MovementVector.Y);
 	AddMovementInput(RightDirection, MovementVector.X);
 }
@@ -143,32 +139,42 @@ void AARAGCharacter::Look(const FInputActionValue& Value)
 {
 	ARCHECK(Controller != nullptr);
 
-	// input is a Vector2D
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
 
-	// add yaw and pitch input to controller
 	AddControllerYawInput(LookAxisVector.X);
 	AddControllerPitchInput(LookAxisVector.Y);
 }
-/*
-UAbilitySystemComponent* AARAGCharacter::GetAbilitySystemComponent() const
+
+void AARAGCharacter::LfMousePressed()
 {
-	return AbilitySystemComponent;
+    ARCHECK(CombatComponent);
+
+    CombatComponent->GetWeapon()->LfMousePressed();
 }
-*/
+
+void AARAGCharacter::LfMouseReleased()
+{
+    ARCHECK(CombatComponent);
+
+    CombatComponent->GetWeapon()->LfMouseReleased();
+}
+
+void AARAGCharacter::RtMousePressed()
+{
+    ARCHECK(CombatComponent);
+
+    CombatComponent->GetWeapon()->RtMousePressed();
+}
+
 void AARAGCharacter::PawnClientRestart()
 {
 	Super::PawnClientRestart();
-
-	//Add Input Mapping Context
-	APlayerController* PlayerController = Cast<APlayerController>(Controller);
+    // 기본 Input Mapping Context 적용
+    AAR_PlayerController* PlayerController = Cast<AAR_PlayerController>(Controller);
 	ARCHECK(PlayerController != nullptr);
 
-	UEnhancedInputLocalPlayerSubsystem* Subsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PlayerController->GetLocalPlayer());
-	ARCHECK(Subsystem != nullptr);
-
-	Subsystem->ClearAllMappings();
-	Subsystem->AddMappingContext(DefaultMappingContext, 0);
+    PlayerController->ClearAllMappings();
+    PlayerController->AddMappingContext(DefaultMappingContext, EInputMappingPriority::Movement);
 }
 
 bool AARAGCharacter::ApplyGameplayEffectToSelf(TSubclassOf<UGameplayEffect> Effect, FGameplayEffectContextHandle InEffectContext)

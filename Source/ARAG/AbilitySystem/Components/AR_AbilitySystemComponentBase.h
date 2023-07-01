@@ -6,6 +6,7 @@
 #include "AbilitySystemComponent.h"
 #include "AR_AbilitySystemComponentBase.generated.h"
 
+/* GAS 능력 컴포넌트 */
 UCLASS()
 class ARAG_API UAR_AbilitySystemComponentBase : public UAbilitySystemComponent
 {
