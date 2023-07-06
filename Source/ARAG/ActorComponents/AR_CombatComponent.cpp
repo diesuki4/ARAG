@@ -16,6 +16,7 @@ void UAR_CombatComponent::BeginPlay()
 {
 	Super::BeginPlay();
     // 임시 코드
+    ARCHECK(DefaultWeapon != nullptr);
     CurrentWeapon = GetWorld()->SpawnActor<AWeaponBase>(DefaultWeapon);
     CurrentWeapon->Equip(GetOwner<AARAGCharacter>());
     CurrentWeapon->Unequip();
