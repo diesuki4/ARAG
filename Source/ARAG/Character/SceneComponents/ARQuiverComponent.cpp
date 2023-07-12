@@ -1,0 +1,124 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#include "Character/SceneComponents/ARQuiverComponent.h"
+//
+#include "Character/Weapons/ARBowArrow.h"
+#include "Engine/StaticMeshSocket.h"
+
+UARQuiverComponent::UARQuiverComponent()
+{
+    PrimaryComponentTick.bCanEverTick = false;
+
+    SetCollisionProfileName(TEXT("NoCollision"));
+
+    nArrows = 0;
+    MaxArrows = 10;
+
+    ArrowBaseSocket = TEXT("ArrowBase");
+}
+
+void UARQuiverComponent::BeginPlay()
+{
+    Super::BeginPlay();
+
+    for (int32 i = 0; i < MaxArrows; ++i)
+    {
+        AARBowArrow* NewArrow = GetWorld()->SpawnActor<AARBowArrow>(ArrowClass);
+
+        AttachArrow(NewArrow);
+        ArrowActors.Add(NewArrow);
+    }
+
+    SetArrows(MaxArrows);
+}
+// 화살 목록에서 화살 제거
+void UARQuiverComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    for (int32 i = 0; i < ArrowActors.Num(); ++i)
+    {
+        if (ArrowActors[i] != nullptr)
+        {
+            GetWorld()->DestroyActor(ArrowActors[i]);
+            ArrowActors[i] = nullptr;
+        }
+    }
+
+    ArrowActors.Empty();
+
+    Super::EndPlay(EndPlayReason);
+}
+
+bool UARQuiverComponent::SetArrows(int32 NewArrows)
+{
+    NewArrows = FMath::Clamp<int32>(NewArrows, 0, MaxArrows);
+
+    if (NewArrows == nArrows)
+        return false;
+
+    nArrows = NewArrows;
+    OnArrowsChanged.Broadcast();    // 화살 개수 변경 델리게이트 발동
+
+    if (nArrows <= 0)
+    {
+        nArrows = 0;
+        OnArrowsIsZero.Broadcast();     // 화살 개수 0개 델리게이트 발동
+    }
+
+    return true;
+}
+
+int32 UARQuiverComponent::GetArrows() const
+{
+    return nArrows;
+}
+
+bool UARQuiverComponent::CanPickArrow() const
+{
+    return (0 < nArrows);
+}
+
+AARBowArrow* UARQuiverComponent::PickArrow()
+{
+    if (SetArrows(nArrows - 1))
+    {
+        ArrowActors.Last()->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+
+        return ArrowActors.Pop();
+    }
+
+    return nullptr;
+}
+
+bool UARQuiverComponent::PutArrow(AARBowArrow* NewArrow)
+{
+    if (SetArrows(nArrows + 1))
+    {
+        // 전달된 화살이 없으면
+        if (NewArrow == nullptr)
+        {
+            // 새로 생성해서 넣기
+            NewArrow = GetWorld()->SpawnActor<AARBowArrow>(ArrowClass);
+        }
+
+        AttachArrow(NewArrow);
+        ArrowActors.Add(NewArrow);
+
+        return true;
+    }
+
+    return false;
+}
+
+void UARQuiverComponent::AttachArrow(AARBowArrow* NewArrow)
+{
+    ARCHECK(NewArrow != nullptr);
+    ARCHECK(DoesSocketExist(ArrowBaseSocket));
+
+    FVector RandomPos = FVector(FMath::RandRange(-5.f, 5.f), FMath::RandRange(-4.f, 4.f), FMath::RandRange(-3.f, 3.f));
+    FRotator RandomRot = FRotator(FMath::RandRange(-5.f, 5.f), 0.f, FMath::RandRange(-5.f, 5.f));
+
+    NewArrow->SetActorRelativeLocation(RandomPos);
+    NewArrow->SetActorRelativeRotation(RandomRot);
+
+    NewArrow->AttachToComponent(this, FAttachmentTransformRules::KeepRelativeTransform, ArrowBaseSocket);
+}

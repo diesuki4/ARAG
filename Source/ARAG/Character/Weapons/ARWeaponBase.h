@@ -1,0 +1,64 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+#pragma once
+
+#include "ARAG.h"
+#include "GameFramework/Actor.h"
+//
+#include "Character/ARCharacter.h"
+#include "Character/ARCharacterAnimInstance.h"
+#include "Animation/AnimMontage.h"
+//
+#include "ARWeaponBase.generated.h"
+
+DECLARE_MULTICAST_DELEGATE(FOnEquipDelegate);       // 무기 장착 시 발동
+DECLARE_MULTICAST_DELEGATE(FOnUnequipDelegate);     // 무기 해제 시 발동
+
+/* 무기 Base */
+UCLASS()
+class ARAG_API AARWeaponBase : public AActor
+{
+    GENERATED_BODY()
+
+public:
+    AARWeaponBase();
+
+protected:
+    virtual void BeginPlay() override;
+
+public:
+    virtual void Equip(AARCharacter* NewCharacter);
+    virtual void Unequip();
+
+    virtual void LfMousePressed();      // 좌클릭 누를 시 호출
+    virtual void LfMouseReleased();     // 좌클릭 뗄 시 호출
+    virtual void RtMousePressed();      // 우클릭 누를 시 호출
+
+    virtual bool CanUse();              // 현재 사용 가능한 상태인지 반환
+
+    FOnEquipDelegate OnEquip;
+    FOnUnequipDelegate OnUnequip;
+
+protected:
+    // 각 애님 노티파이 시 호출되는 함수
+    virtual void AttackStart();         // AttackStart
+    virtual void Attack();              // Attack
+    virtual void AttackEnd();           // AttackEnd
+    
+    AARCharacter* Character;
+    
+    UPROPERTY()
+    UARCharacterAnimInstance* CharacterAnimInstance;
+    // 무기별 애니메이션 몽타주
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = Weapon, Meta = (AllowPrivateAccess = true))
+    UAnimMontage* AttackMontage;
+    // 무기별 Input Mapping Context
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Weapon, meta = (AllowPrivateAccess = true))
+    class UInputMappingContext* WeaponMappingContext;
+    // 무기별 장착 위치
+    UPROPERTY(EditDefaultsOnly, Category = Weapon, meta = (AllowPrivateAccess = true))
+    FName WeaponSocket;
+    // 무기 공격력
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Weapon, meta = (AllowPrivateAccess = true))
+    float WeaponDamage;
+};

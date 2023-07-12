@@ -58,9 +58,10 @@ Session.vim
 !/.editorconfig
 
 # Oversized files
-/Content/ParagonGideon/**
-/Content/Bow_MocapAnimPack/**
-/Content/Sci-FiBows/**
-/Content/InfinityBladeWeapons/**
-/Content/FighterAnimationPack/**
-/Content/ParagonMinions/**
+/Content/Assets/StylizedProvencal/**
+/Content/Assets/ParagonGideon/**
+/Content/Assets/Bow_MocapAnimPack/**
+/Content/Assets/Sci-FiBows/**
+/Content/Assets/InfinityBladeWeapons/**
+/Content/Assets/FighterAnimationPack/**
+/Content/Assets/ParagonMinions/**
