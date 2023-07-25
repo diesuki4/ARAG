@@ -11,15 +11,15 @@ void UARCharacterAttributeSet::PostGameplayEffectExecute(const struct FGameplayE
 {
     Super::PostGameplayEffectExecute(Data);
 
-    if (Data.EvaluatedData.Attribute == GetHPAttribute())
+    if (Data.EvaluatedData.Attribute == GetHPAttribute())   // HP
     {
-        SetHP(FMath::Clamp(GetHP(), 0.f, GetMaxHP()));
+        SetHP(FMath::Clamp(GetHP(), 0.F, GetMaxHP()));
     }
-    else if (Data.EvaluatedData.Attribute == GetMPAttribute())
+    else if (Data.EvaluatedData.Attribute == GetMPAttribute())  // MP
     {
-        SetMP(FMath::Clamp(GetMP(), 0.f, GetMaxMP()));
+        SetMP(FMath::Clamp(GetMP(), 0.F, GetMaxMP()));
     }
-    else if (Data.EvaluatedData.Attribute == GetMaxMovementSpeedAttribute())
+    else if (Data.EvaluatedData.Attribute == GetMaxMovementSpeedAttribute())    // MaxMovementSpeed
     {
         ACharacter* OwningCharacter = Cast<ACharacter>(GetOwningActor());
         ARCHECK(OwningCharacter != nullptr);

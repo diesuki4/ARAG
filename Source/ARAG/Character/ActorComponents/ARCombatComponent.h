@@ -25,13 +25,11 @@ public:
     AARWeaponBase* GetWeapon() { return CurrentWeapon; }
 
     bool CanAttack();
-    void SetIsAttacking(bool NewIsAttacking);
-    bool IsAttacking() { return bIsAttacking; }
 
 protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = Combat, Meta = (AllowPrivateAccess = true))
     AARWeaponBase* CurrentWeapon;
 
-    bool bIsAttacking;
     // 임시 코드
     // 기본 무기
     UPROPERTY(EditDefaultsOnly, Category = Weapon, meta = (AllowPrivateAccess = true))

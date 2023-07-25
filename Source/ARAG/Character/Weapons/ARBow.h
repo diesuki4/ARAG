@@ -5,10 +5,11 @@
 #include "ARAG.h"
 #include "Character/Weapons/ARWeaponSkeletalBase.h"
 #include "ARBow.generated.h"
-
-class UARQuiverComponent;
 /*
     활 무기 (AR Weapon Base - AR Weapon Skeletal Base - AR Bow)
+    - 좌클릭 누름: 활 조준
+    - 좌클릭 뗌:   활 쏘기
+    - 우클릭 누름: 화살 다시 집어넣기
 */
 UCLASS()
 class ARAG_API AARBow : public AARWeaponSkeletalBase
@@ -26,23 +27,31 @@ public:
     virtual void LfMouseReleased() override;     // 좌클릭 뗄 시 호출    Attack() > AttackEnd()
     virtual void RtMousePressed() override;      // 우클릭 누를 시 호출  AttackEnd()
 
-    virtual bool CanUse();      // 현재 사용 가능한 상태인지 반환
+    virtual bool CanUse() override;      // 현재 사용 가능한 상태인지 반환
 
 protected:
     // 각 애님 노티파이 시 호출되는 함수
-    virtual void AttackStart();  // AttackStart
-    virtual void Attack();       // Attack
-    virtual void AttackEnd();    // AttackEnd
+    virtual void AttackStart() override;  // AttackStart
+    virtual void Attack() override;       // Attack
+    // ARCharacter->OnStateChanged 델리게이트에 등록
+    // 공격 중에 피격당할 시 처리하기 위함
+    virtual void OnCharacterStateChanged(EARCharacterState OldState, EARCharacterState NewState) override;
 
     // 화살집 종류
     UPROPERTY(EditDefaultsOnly, Category = Bow, Meta = (AllowPrivateAccess = true))
-    TSubclassOf<UARQuiverComponent> QuiverComponentClass;
-    // 캐릭터 메시에 화살집 컴포넌트를 부착할 위치
+    TSubclassOf<class UARQuiverComponent> QuiverComponentClass;
+    // 캐릭터 메시에 화살집 컴포넌트를 부착할 소켓
     UPROPERTY(EditDefaultsOnly, Category = Bow, meta = (AllowPrivateAccess = true))
     FName QuiverSocket;
-    // 활 공격 시 캐릭터 메시 손 부분에 화살을 붙일 위치
+    // 활 공격 시 캐릭터 메시 손 부분에 화살을 붙일 소켓
     UPROPERTY(EditDefaultsOnly, Category = Bow, meta = (AllowPrivateAccess = true))
     FName ArrowSocket;
+    // 일반 FOV
+    UPROPERTY(EditDefaultsOnly, Category = Bow, meta = (AllowPrivateAccess = true))
+    float IdleFOV;
+    // 조준 시 FOV
+    UPROPERTY(EditDefaultsOnly, Category = Bow, meta = (AllowPrivateAccess = true))
+    float AimingFOV;
 
     // 캐릭터에 붙인 화살집 캐싱
     UARQuiverComponent* QuiverComponent;

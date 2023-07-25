@@ -7,16 +7,19 @@
 #include "InputActionValue.h"
 //
 #include "AbilitySystemInterface.h"
-#include "Abilities/GameplayAbility.h"
-#include "Character/AbilitySystem/ARCharacterAbilitySystemComponent.h"
-#include "DataAssets/ARActorDataAsset.h"
+#include "AbilitySystem/ARAbilitySystemComponent.h"
+#include "Character/AbilitySystem/ARCharacterAttributeSet.h"
+#include "Character/Types/ARCharacterState.h"
 //
 #include "ARCharacter.generated.h"
 
-class UGameplayEffect;
-class UGameplayAbility;
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnCharacterStateChangedDelegate, EARCharacterState /*OldState*/, EARCharacterState /*NewState*/);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnCharacterDamagedDelegate, AActor* /*DamageCauser*/);
+DECLARE_MULTICAST_DELEGATE(FOnCharacterDieDelegate);
+
 class UARCharacterAttributeSet;
 class UARCombatComponent;
+class UARDataComponent;
 
 /* 메인 캐릭터 */
 UCLASS(config=Game)
@@ -49,21 +52,26 @@ class AARCharacter : public ACharacter, public IAbilitySystemInterface
     class UInputAction* RtMouseAction;
 
 public:
-	AARCharacter(const FObjectInitializer& ObjectInitializer);
+	AARCharacter();
+
+    FOnCharacterStateChangedDelegate OnStateChanged;
+    FOnCharacterDamagedDelegate OnDamaged;
+    FOnCharacterDieDelegate OnDie;
 
 	virtual void PawnClientRestart() override;
+    virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
+                             class AController* EventInstigator, AActor* DamageCauser) override;
 
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE class UCameraComponent* GetFollowCamera() const { return FollowCamera; }
 
 protected:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
-	virtual void BeginPlay();
 
-	virtual void PostInitializeComponents() override;
-	virtual void PossessedBy(AController* NewController) override;
-	virtual void OnRep_PlayerState() override;
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+    virtual void PostInitializeComponents() override;
+    virtual void PossessedBy(AController* NewController) override;
+    virtual void OnRep_PlayerState() override;
+	virtual void BeginPlay() override;
 
 	void Move(const FInputActionValue& Value);
 	void Look(const FInputActionValue& Value);
@@ -71,50 +79,45 @@ protected:
     void LfMouseReleased();
     void RtMousePressed();
 
+    // 캐릭터의 상태
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Character, Meta = (AllowPrivateAccess = true))
+    EARCharacterState State;
+
+    // 임시 코드
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Character, Meta = (AllowPrivateAccess = true))
+    float HP;
+
 public:
     // 전투 담당 컴포넌트
-    UPROPERTY(VisibleAnywhere)
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Combat)
     UARCombatComponent* CombatComponent;
 
     UARCombatComponent* GetCombatComponent() { return CombatComponent; }
+
+    EARCharacterState GetState() const { return State; }
+    void SetState(EARCharacterState NewState);
+
+    // 임시 코드
+    float GetHP() const { return HP; }
 
 /* GAS */
 public:
 	virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override { return AbilitySystemComponent; }
 
-    // 능력 부여 함수
-    void GiveAbility(TSubclassOf<UGameplayAbility> Ability);
-    void GiveAbility(TArray<TSubclassOf<UGameplayAbility>> Abilities);
-    // 이펙트 적용 함수
-    bool ApplyGameplayEffectToSelf(TSubclassOf<UGameplayEffect> Effect, FGameplayEffectContextHandle InEffectContext);
-	bool ApplyGameplayEffectToSelf(TSubclassOf<UGameplayEffect> Effect, UObject* NewSourceObject = nullptr);
-    bool ApplyGameplayEffectToSelf(TArray<TSubclassOf<UGameplayEffect>> Effects, UObject* NewSourceObject = nullptr);
-
 protected:
 	UPROPERTY(EditDefaultsOnly)
-	UARCharacterAbilitySystemComponent* AbilitySystemComponent;
+	UARAbilitySystemComponent* AbilitySystemComponent;
 
 	UPROPERTY(Transient)
 	UARCharacterAttributeSet* AttributeSet;
 
-/* 액터 데이터 */
-public:
-	UFUNCTION(BlueprintCallable)
-	FARActorData GetActorData() const;
-
-	UFUNCTION(BlueprintCallable)
-	void SetActorData(const FARActorData& InActorData);
-
+/* 캐릭터 데이터 */
 protected:
-    // 기본 액터 데이터 에셋
-    UPROPERTY(EditDefaultsOnly)
-    UARActorDataAsset* ActorDataAsset;
-    // 현재 액터 데이터
-	UPROPERTY(ReplicatedUsing = OnRep_ActorData)
-	FARActorData ActorData;
+    UPROPERTY(VisibleAnywhere)
+    UARDataComponent* DataComponent;
+    // Data Component에서 가져온 데이터 캐싱
+    class UARCharacterDataAsset* CharacterData;
 
-	UFUNCTION()
-	void OnRep_ActorData();
-
-	virtual void InitFromActorData(const FARActorData& InActorData, bool bFromReplication = false);
+public:
+    UARDataComponent* GetDataComponent() { return DataComponent; }
 };

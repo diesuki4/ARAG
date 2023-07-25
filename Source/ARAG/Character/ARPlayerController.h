@@ -10,6 +10,7 @@
 #include "ARPlayerController.generated.h"
 
 class UInputMappingContext;
+class UARHUDWidget;
 
 /* 메인 플레이어 컨트롤러 */
 UCLASS()
@@ -23,4 +24,17 @@ public:
     void ClearAllMappings();
     void AddMappingContext(UInputMappingContext* NewMappingContext, EARInputMappingPriority Priority);
     void RemoveMappingContext(UInputMappingContext* MappingContext);
+
+    UARHUDWidget* GetHUDWidget() const { return HUDWidget; };
+
+protected:
+    virtual void BeginPlay() override;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = UI)
+    TSubclassOf<UARHUDWidget> HUDWidgetClass;
+
+private:
+    // 메인 HUD
+    UPROPERTY()
+    UARHUDWidget* HUDWidget;
 };

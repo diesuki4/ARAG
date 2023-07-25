@@ -4,10 +4,23 @@
 //
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
+#include "HUD/ARHUDWidget.h"
 
 AARPlayerController::AARPlayerController()
 {
 
+}
+
+void AARPlayerController::BeginPlay()
+{
+    Super::BeginPlay();
+
+    SetInputMode(FInputModeGameOnly());
+
+    HUDWidget = CreateWidget<UARHUDWidget>(this, HUDWidgetClass);
+    ARCHECK(HUDWidget != nullptr);
+
+    HUDWidget->AddToViewport();
 }
 
 void AARPlayerController::ClearAllMappings()

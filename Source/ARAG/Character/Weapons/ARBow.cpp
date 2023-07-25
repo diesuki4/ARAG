@@ -2,13 +2,18 @@
 
 #include "Character/Weapons/ARBow.h"
 //
+#include "Character/ARPlayerController.h"
 #include "Character/SceneComponents/ARQuiverComponent.h"
 #include "Character/Weapons/ARBowArrow.h"
+#include "HUD/ARHUDWidget.h"
 #include "GameFramework/ProjectileMovementComponent.h"
+#include "Components/BoxComponent.h"
+#include "Camera/CameraComponent.h"
 
 AARBow::AARBow()
 {
-
+    IdleFOV = 90.F;
+    AimingFOV = 60.F;
 }
 
 void AARBow::Equip(AARCharacter* NewCharacter)
@@ -26,6 +31,11 @@ void AARBow::Equip(AARCharacter* NewCharacter)
         QuiverComponent = Cast<UARQuiverComponent>(ActorComponent);
         QuiverComponent->AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, QuiverSocket);
     }
+
+    UCameraComponent* Camera = Character->GetFollowCamera();
+    ARCHECK(Camera != nullptr);
+    // 기존 캐릭터 FOV를 일반 FOV로 설정
+    IdleFOV = Camera->FieldOfView;
 }
 
 void AARBow::Unequip()
@@ -50,10 +60,19 @@ void AARBow::LfMousePressed()
 
     ARCHECK(CharacterAnimInstance != nullptr);
 
-    if (CanUse())   // 화살을 다시 집어넣는 중에 쏘는 것을 방지하기 위함
+    // 활을 사용할 수 있으면
+    if (CanUse())
     {
+        // 활 공격 몽타주 재생
         CharacterAnimInstance->PlayAttackMontage();
-        CharacterAnimInstance->JumpToMontageSection(EARMontageSectionName::LfMousePressed);
+        CharacterAnimInstance->JumpToMontageSection(EARCharacterMontageSectionName::LfMousePressed);
+    }
+    // 화살이 없으면
+    else if (Character->GetState() == EARCharacterState::Normal)
+    {
+        // 근접 공격 몽타주 재생
+        CharacterAnimInstance->PlayAttackMontage();
+        CharacterAnimInstance->JumpToMontageSection(EARCharacterMontageSectionName::LfMousePressed_ML);
     }
 }
 // Attack() 호출
@@ -65,10 +84,10 @@ void AARBow::LfMouseReleased()
     ARCHECK(CurrentArrow != nullptr);
     
     // 화살을 다시 집어넣는 중에 쏘는 것을 방지하기 위함
-    if (CharacterAnimInstance->GetCurrentSection() == EARMontageSectionName::LfMousePressed)
+    if (CharacterAnimInstance->GetCurrentSection() == EARCharacterMontageSectionName::LfMousePressed)
     {
         CharacterAnimInstance->PlayAttackMontage();
-        CharacterAnimInstance->JumpToMontageSection(EARMontageSectionName::LfMouseReleased);
+        CharacterAnimInstance->JumpToMontageSection(EARCharacterMontageSectionName::LfMouseReleased);
     }
 }
 // AttackEnd() 호출
@@ -80,10 +99,10 @@ void AARBow::RtMousePressed()
     ARCHECK(CurrentArrow != nullptr);
 
     // 화살을 다시 집어넣는 중에 또 집어넣는 것을 방지하기 위함
-    if (CharacterAnimInstance->GetCurrentSection() != EARMontageSectionName::RtMousePressed)
+    if (CharacterAnimInstance->GetCurrentSection() != EARCharacterMontageSectionName::RtMousePressed)
     {
         CharacterAnimInstance->PlayAttackMontage();
-        CharacterAnimInstance->JumpToMontageSection(EARMontageSectionName::RtMousePressed);
+        CharacterAnimInstance->JumpToMontageSection(EARCharacterMontageSectionName::RtMousePressed);
     }
 }
 
@@ -108,8 +127,16 @@ void AARBow::AttackStart()
         ARCHECK(CharacterMesh != nullptr);
 
         CurrentArrow->AttachToComponent(CharacterMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, ArrowSocket);
-        // 방향은 시선 방향으로 고정
-        Character->bUseControllerRotationYaw = true;
+
+        UCameraComponent* Camera = Character->GetFollowCamera();
+        ARCHECK(Camera != nullptr);
+        // 조준 FOV 설정
+        Camera->FieldOfView = AimingFOV;
+
+        AARPlayerController* PlayerController = Cast<AARPlayerController>(Character->GetController());
+        ARCHECK(PlayerController != nullptr);
+        // 조준선 표시
+        PlayerController->GetHUDWidget()->SetUIVisibility(EARCharacterUI::Crosshair, ESlateVisibility::HitTestInvisible);
     }
 }
 
@@ -117,36 +144,55 @@ void AARBow::Attack()
 {
     Super::Attack();
 
-    ARCHECK(CurrentArrow != nullptr);
-
-    UProjectileMovementComponent* ProjectileMovement = CurrentArrow->GetProjectileMovement();
-    ARCHECK(ProjectileMovement != nullptr);
-    // 캐릭터 손에서 화살을 떼고 발사시킨다.
-    CurrentArrow->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-    ProjectileMovement->Velocity = CurrentArrow->GetActorForwardVector() * ProjectileMovement->InitialSpeed;
-    ProjectileMovement->Activate();
-
-    CurrentArrow->SetLifeSpan(CurrentArrow->GetArrowLifeSpan());
-    CurrentArrow = nullptr;
-    // 캐릭터 방향 설정 복원
-    Character->bUseControllerRotationYaw = false;
-}
-
-void AARBow::AttackEnd()
-{
-    ARCHECK(QuiverComponent != nullptr);
-    // 손에 화살이 있으면 (화살을 손에 들고 우클릭을 눌렀으면)
+    // 현재 캐릭터 손에 화살이 있으면
     if (CurrentArrow != nullptr)
     {
-        // 다시 화살집에 넣는다.
+        UProjectileMovementComponent* ProjectileMovement = CurrentArrow->GetProjectileMovement();
+        ARCHECK(ProjectileMovement != nullptr);
+        ARCHECK(Character != nullptr);
+        // 손에서 화살을 떼고 발사시킨다.
         CurrentArrow->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
-        QuiverComponent->PutArrow(CurrentArrow);
+        CurrentArrow->Box->SetCollisionProfileName("Arrow");
+        CurrentArrow->SetActorRotation(Character->GetBaseAimRotation());
+        ProjectileMovement->Velocity = Character->GetBaseAimRotation().Vector() * ProjectileMovement->InitialSpeed;
+        ProjectileMovement->Activate();
 
+        CurrentArrow->SetLifeSpan(CurrentArrow->GetArrowLifeSpan());
         CurrentArrow = nullptr;
     }
+    // 없으면 근접 공격 수행
+    else
+    {
+        MeleeAttack();
+    }
+}
 
-    // 캐릭터 방향 설정 복원
-    Character->bUseControllerRotationYaw = false;
+void AARBow::OnCharacterStateChanged(EARCharacterState OldState, EARCharacterState NewState)
+{
+    Super::OnCharacterStateChanged(OldState, NewState);
 
-    Super::AttackEnd();
+    // 공격이 끝났거나 피격 당했으면
+    if ((NewState == EARCharacterState::Normal) || (NewState == EARCharacterState::Damaged))
+    {
+        ARCHECK(QuiverComponent != nullptr);
+        // 손에 화살이 있으면 (화살을 손에 들고 우클릭을 눌렀으면)
+        if (CurrentArrow != nullptr)
+        {
+            // 다시 화살집에 넣는다.
+            CurrentArrow->DetachFromActor(FDetachmentTransformRules::KeepWorldTransform);
+            QuiverComponent->PutArrow(CurrentArrow);
+
+            CurrentArrow = nullptr;
+        }
+
+        UCameraComponent* Camera = Character->GetFollowCamera();
+        ARCHECK(Camera != nullptr);
+        // FOV를 복원한다.
+        Camera->FieldOfView = IdleFOV;
+
+        AARPlayerController* PlayerController = Cast<AARPlayerController>(Character->GetController());
+        ARCHECK(PlayerController != nullptr);
+        // 조준선을 숨긴다.
+        PlayerController->GetHUDWidget()->SetUIVisibility(EARCharacterUI::Crosshair, ESlateVisibility::Collapsed);
+    }
 }

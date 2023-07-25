@@ -20,12 +20,5 @@ public:
     virtual void LfMousePressed() override;      // 좌클릭 누를 시 호출  Attack()
 
 protected:
-    virtual void Attack();  // Attack 애님 노티파이 시 호출되는 함수
-
-    // 공격 판정 거리
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Sword, meta = (AllowPrivateAccess = true))
-    float AttackRange;
-    // 공격 판정 반지름
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Sword, meta = (AllowPrivateAccess = true))
-    float AttackRadius;
+    virtual void Attack() override;  // Attack 애님 노티파이 시 호출되는 함수
 };

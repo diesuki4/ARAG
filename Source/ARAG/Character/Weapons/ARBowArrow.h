@@ -17,6 +17,9 @@ class ARAG_API AARBowArrow : public AActor
 public:	
     AARBowArrow();
 
+protected:
+    virtual void PostInitializeComponents() override;
+
 public:
     UPROPERTY(EditDefaultsOnly)
     class UBoxComponent* Box;
@@ -30,6 +33,9 @@ public:
     UProjectileMovementComponent* GetProjectileMovement() { return ProjectileMovement; }
 
     float GetArrowLifeSpan() const { return LifeSpan; }
+
+    UFUNCTION()
+    void OnEnemyHit(UPrimitiveComponent* HitComp, AActor* OtherActor, UPrimitiveComponent* OtherComp, FVector NormalImpulse, const FHitResult& Hit);
 
 protected:
     // 파괴 수명

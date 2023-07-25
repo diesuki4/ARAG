@@ -31,10 +31,8 @@ bool UARCombatComponent::CanAttack()
 {
     ARCHECK(CurrentWeapon != nullptr, false);
 
-    return CurrentWeapon->CanUse();
-}
+    AARCharacter* Character = Cast<AARCharacter>(CurrentWeapon->GetOwner());
+    ARCHECK(Character != nullptr, false);
 
-void UARCombatComponent::SetIsAttacking(bool NewIsAttacking)
-{
-    bIsAttacking = NewIsAttacking;
+    return (Character->GetState() == EARCharacterState::Normal);
 }

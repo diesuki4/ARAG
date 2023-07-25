@@ -3,16 +3,23 @@
 #include "Character/ARCharacterAnimInstance.h"
 //
 #include "Animation/AnimMontage.h"
+#include "Character/ARCharacter.h"
+#include "Kismet/KismetMathLibrary.h"
 
 UARCharacterAnimInstance::UARCharacterAnimInstance()
 {
-
+    bUseAimOffset = false;
+    State = EARCharacterState::Normal;
 }
 
-void UARCharacterAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
+void UARCharacterAnimInstance::NativeInitializeAnimation()
 {
-    Super::NativeUpdateAnimation(DeltaSeconds);
+    Super::NativeInitializeAnimation();
 
+    AARCharacter* Character = Cast<AARCharacter>(GetOwningActor());
+    ARCHECK(Character != nullptr);
+    // 상태를 받아오기 위해 람다 함수 등록
+    Character->OnStateChanged.AddLambda([this](EARCharacterState OldState, EARCharacterState NewState) { State = NewState; });
 }
 
 void UARCharacterAnimInstance::SetAttackMontage(UAnimMontage* NewAttackMontage)
@@ -28,40 +35,31 @@ void UARCharacterAnimInstance::PlayAttackMontage()
     }
 }
 
-EARMontageSectionName UARCharacterAnimInstance::GetCurrentSection()
+EARCharacterMontageSectionName UARCharacterAnimInstance::GetCurrentSection()
 {
     return CurrentSection;
 }
 
-void UARCharacterAnimInstance::JumpToMontageSection(EARMontageSectionName NewSection)
+void UARCharacterAnimInstance::JumpToMontageSection(EARCharacterMontageSectionName NewSection)
 {
     CurrentSection = NewSection;
 
     Montage_JumpToSection(GetAttackMontageSectionName(NewSection), AttackMontage);
 }
 
-FName UARCharacterAnimInstance::GetAttackMontageSectionName(EARMontageSectionName NewSection)
+FName UARCharacterAnimInstance::GetAttackMontageSectionName(EARCharacterMontageSectionName NewSection)
 {
     switch (NewSection)
     {
-        case EARMontageSectionName::LfMousePressed:  return LfMousePressedSectionName;
-        case EARMontageSectionName::LfMouseReleased: return LfMouseReleasedSectionName;
-        case EARMontageSectionName::RtMousePressed:  return RtMousePressedSectionName;
-        default:                                     return TEXT("");
+        case EARCharacterMontageSectionName::LfMousePressed:     return LfMousePressedSectionName;
+        case EARCharacterMontageSectionName::LfMousePressed_ML:  return LfMousePressedMeleeSectionName;
+
+        case EARCharacterMontageSectionName::LfMouseReleased:    return LfMouseReleasedSectionName;
+        case EARCharacterMontageSectionName::LfMouseReleased_ML: return LfMouseReleasedMeleeSectionName;
+
+        case EARCharacterMontageSectionName::RtMousePressed:     return RtMousePressedSectionName;
+        case EARCharacterMontageSectionName::RtMousePressed_ML:  return RtMousePressedMeleeSectionName;
+
+        default:                                                 return TEXT("");
     }
-}
-
-void UARCharacterAnimInstance::AnimNotify_AttackStart()
-{
-    OnAttackStart.Broadcast();
-}
-
-void UARCharacterAnimInstance::AnimNotify_Attack()
-{
-    OnAttack.Broadcast();
-}
-
-void UARCharacterAnimInstance::AnimNotify_AttackEnd()
-{
-    OnAttackEnd.Broadcast();
 }

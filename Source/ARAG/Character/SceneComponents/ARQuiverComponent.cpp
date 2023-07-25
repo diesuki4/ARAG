@@ -21,9 +21,11 @@ void UARQuiverComponent::BeginPlay()
 {
     Super::BeginPlay();
 
+    // MaxArrows 수만큼 화살을 생성해 화살집에 넣는다.
     for (int32 i = 0; i < MaxArrows; ++i)
     {
         AARBowArrow* NewArrow = GetWorld()->SpawnActor<AARBowArrow>(ArrowClass);
+        NewArrow->SetOwner(GetOwner());
 
         AttachArrow(NewArrow);
         ArrowActors.Add(NewArrow);
@@ -31,9 +33,10 @@ void UARQuiverComponent::BeginPlay()
 
     SetArrows(MaxArrows);
 }
-// 화살 목록에서 화살 제거
+
 void UARQuiverComponent::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
+    // 화살 목록의 화살 소멸    
     for (int32 i = 0; i < ArrowActors.Num(); ++i)
     {
         if (ArrowActors[i] != nullptr)
@@ -98,6 +101,7 @@ bool UARQuiverComponent::PutArrow(AARBowArrow* NewArrow)
         {
             // 새로 생성해서 넣기
             NewArrow = GetWorld()->SpawnActor<AARBowArrow>(ArrowClass);
+            NewArrow->SetOwner(GetOwner());
         }
 
         AttachArrow(NewArrow);
@@ -114,8 +118,8 @@ void UARQuiverComponent::AttachArrow(AARBowArrow* NewArrow)
     ARCHECK(NewArrow != nullptr);
     ARCHECK(DoesSocketExist(ArrowBaseSocket));
 
-    FVector RandomPos = FVector(FMath::RandRange(-5.f, 5.f), FMath::RandRange(-4.f, 4.f), FMath::RandRange(-3.f, 3.f));
-    FRotator RandomRot = FRotator(FMath::RandRange(-5.f, 5.f), 0.f, FMath::RandRange(-5.f, 5.f));
+    FVector RandomPos = FVector(FMath::RandRange(-5.F, 5.F), FMath::RandRange(-4.F, 4.F), FMath::RandRange(-3.F, 3.F));
+    FRotator RandomRot = FRotator(FMath::RandRange(-5.F, 5.F), 0.F, FMath::RandRange(-5.F, 5.F));
 
     NewArrow->SetActorRelativeLocation(RandomPos);
     NewArrow->SetActorRelativeRotation(RandomRot);

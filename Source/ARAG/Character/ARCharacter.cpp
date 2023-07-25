@@ -10,84 +10,117 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 //
-#include "Character/AbilitySystem/ARCharacterAttributeSet.h"
-#include "AbilitySystemBlueprintLibrary.h"
-#include "Net/UnrealNetwork.h"
-#include "Character/ActorComponents/ARCharacterMovementComponent.h"
+#include "ActorComponents/ARDataComponent.h"
 #include "Character/ActorComponents/ARCombatComponent.h"
 #include "Character/ARPlayerController.h"
 #include "Character/Types/ARInputMappingPriority.h"
 #include "Character/Weapons/ARWeaponBase.h"
+#include "Character/DataAssets/ARCharacterDataAsset.h"
 
-AARCharacter::AARCharacter(const FObjectInitializer& ObjectInitializer) :
-	Super(ObjectInitializer.SetDefaultSubobjectClass<UARCharacterMovementComponent>(ACharacter::CharacterMovementComponentName))
+AARCharacter::AARCharacter()
 {
-	GetCapsuleComponent()->InitCapsuleSize(42.f, 96.0f);
+	GetCapsuleComponent()->InitCapsuleSize(42.F, 96.0F);
 		
 	bUseControllerRotationPitch = false;
 	bUseControllerRotationYaw = false;
 	bUseControllerRotationRoll = false;
 
 	GetCharacterMovement()->bOrientRotationToMovement = true;
-	GetCharacterMovement()->RotationRate = FRotator(0.0f, 500.0f, 0.0f);
+	GetCharacterMovement()->RotationRate = FRotator(0.0F, 500.0F, 0.0F);
 
-	GetCharacterMovement()->JumpZVelocity = 700.f;
-	GetCharacterMovement()->AirControl = 0.35f;
-	GetCharacterMovement()->MaxWalkSpeed = 500.f;
-	GetCharacterMovement()->MinAnalogWalkSpeed = 20.f;
-	GetCharacterMovement()->BrakingDecelerationWalking = 2000.f;
+	GetCharacterMovement()->JumpZVelocity = 700.F;
+	GetCharacterMovement()->AirControl = 0.35F;
+	GetCharacterMovement()->MaxWalkSpeed = 500.F;
+	GetCharacterMovement()->MinAnalogWalkSpeed = 20.F;
+	GetCharacterMovement()->BrakingDecelerationWalking = 2000.F;
 
 	CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
 	CameraBoom->SetupAttachment(RootComponent);
-	CameraBoom->TargetArmLength = 400.0f;
+	CameraBoom->TargetArmLength = 400.0F;
 	CameraBoom->bUsePawnControlRotation = true;
-    CameraBoom->SetRelativeLocation(FVector(30.f, 0.f, 200.f));
+    CameraBoom->SetRelativeLocation(FVector(30.F, 0.F, 200.F));
 
 	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 	FollowCamera->bUsePawnControlRotation = false;
-    FollowCamera->SetRelativeRotation(FRotator(-20.0f, 0.0f, 0.0f));
+    FollowCamera->SetRelativeRotation(FRotator(-20.0F, 0.0F, 0.0F));
 
-    CombatComponent = CreateDefaultSubobject<UARCombatComponent>(TEXT("Combat"));
+    CombatComponent = CreateDefaultSubobject<UARCombatComponent>(TEXT("CombatComponent"));
 
-	AbilitySystemComponent = CreateDefaultSubobject<UARCharacterAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
-	AbilitySystemComponent->SetIsReplicated(true);
-	AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Mixed);
+    DataComponent = CreateDefaultSubobject<UARDataComponent>(TEXT("DataComponent"));
 
+	AbilitySystemComponent = CreateDefaultSubobject<UARAbilitySystemComponent>(TEXT("AbilitySystemComponent"));
 	AttributeSet = CreateDefaultSubobject<UARCharacterAttributeSet>(TEXT("AttributeSet"));
+
+    State = EARCharacterState::Normal;
 }
 
 void AARCharacter::PostInitializeComponents()
 {
-	Super::PostInitializeComponents();
+    Super::PostInitializeComponents();
 
-	ARCHECK(IsValid(ActorDataAsset));
+    ARCHECK(DataComponent != nullptr);
+    // 캐릭터 데이터 가져오기
+    CharacterData = Cast<UARCharacterDataAsset>(DataComponent->GetActorData());
+    ARCHECK(CharacterData != nullptr);
 
-	SetActorData(ActorDataAsset->ActorData);
+    UARCharacterAnimInstance* CharacterAnimInstance = Cast<UARCharacterAnimInstance>(GetMesh()->GetAnimInstance());
+    ARCHECK(CharacterAnimInstance != nullptr);
+    // 피격, 죽음 애니메이션 종료시 동작 등록
+    CharacterAnimInstance->OnAnimationEnd.AddLambda([this]()
+    {
+        switch (State)
+        {
+        case EARCharacterState::Die:
+            SetActorEnableCollision(false);
+            GetMesh()->SetHiddenInGame(true);
+            SetActorHiddenInGame(true);
+            Destroy();
+            break;
+        default:
+            SetState(EARCharacterState::Normal);
+        }
+    });
+    // 피격 시 상태 변경 등록
+    OnDamaged.AddLambda([this](AActor* DamageCauser) { SetState(EARCharacterState::Damaged); });
+    // 죽을 시 동작 등록
+    OnDie.AddLambda([this]()
+    {
+        SetCanBeDamaged(false);
+        DisableInput(Cast<APlayerController>(GetController()));
+
+        SetState(EARCharacterState::Die);
+    });
+
+    // 임시 코드
+    HP = CharacterData->MaxHP;
 }
 
 void AARCharacter::PossessedBy(AController* NewController)
 {
-	Super::PossessedBy(NewController);
+    Super::PossessedBy(NewController);
 
-	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+    ARCHECK(AbilitySystemComponent != nullptr);
 
+    AbilitySystemComponent->InitAbilityActorInfo(this, this);
     // 데이터 에셋으로부터 기본 GAS 능력 부여
-    GiveAbility(ActorData.Abilities);
+    AbilitySystemComponent->GiveAbility(CharacterData->Abilities);
     // 데이터 에셋으로부터 기본 GAS 이펙트 적용
-    ApplyGameplayEffectToSelf(ActorData.Effects);
+    AbilitySystemComponent->ApplyGameplayEffectToSelf(CharacterData->Effects);
 }
 
 void AARCharacter::OnRep_PlayerState()
 {
-	Super::OnRep_PlayerState();
+    Super::OnRep_PlayerState();
 
-	AbilitySystemComponent->InitAbilityActorInfo(this, this);
+    AbilitySystemComponent->InitAbilityActorInfo(this, this);
 }
 
 void AARCharacter::BeginPlay()
 {
     Super::BeginPlay();
+
+    SetState(State);
 }
 
 void AARCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent)
@@ -95,17 +128,15 @@ void AARCharacter::SetupPlayerInputComponent(class UInputComponent* PlayerInputC
 	UEnhancedInputComponent* EnhancedInputComponent = CastChecked<UEnhancedInputComponent>(PlayerInputComponent);
 	ARCHECK(EnhancedInputComponent != nullptr);
 
-	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
-	EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
-
 	EnhancedInputComponent->BindAction(MoveAction, ETriggerEvent::Triggered, this, &AARCharacter::Move);
 
 	EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AARCharacter::Look);
 
+    EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+    EnhancedInputComponent->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
+
     EnhancedInputComponent->BindAction(LfMouseAction, ETriggerEvent::Started, this, &AARCharacter::LfMousePressed);
-
     EnhancedInputComponent->BindAction(LfMouseAction, ETriggerEvent::Completed, this, &AARCharacter::LfMouseReleased);
-
     EnhancedInputComponent->BindAction(RtMouseAction, ETriggerEvent::Started, this, &AARCharacter::RtMousePressed);
 }
 
@@ -168,96 +199,30 @@ void AARCharacter::PawnClientRestart()
     PlayerController->AddMappingContext(DefaultMappingContext, EARInputMappingPriority::Movement);
 }
 
-void AARCharacter::GiveAbility(TSubclassOf<UGameplayAbility> Ability)
+float AARCharacter::TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent,
+                               AController* EventInstigator, AActor* DamageCauser)
 {
-    ARCHECK(AbilitySystemComponent);
-    ARCHECK(HasAuthority());
+    float FinalDamage = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
 
-    AbilitySystemComponent->GiveAbility(FGameplayAbilitySpec(Ability));
-}
-
-void AARCharacter::GiveAbility(TArray<TSubclassOf<UGameplayAbility>> Abilities)
-{
-    ARCHECK(AbilitySystemComponent);
-    ARCHECK(HasAuthority());
-
-    for (auto Ability : Abilities)
+    ARLOG(Warning, TEXT("%s took Damage %f"), *GetName(), FinalDamage);
+    // 임시 코드
+    if ((HP -= FinalDamage) <= 0)
     {
-        GiveAbility(Ability);
+        OnDie.Broadcast();
     }
-}
-
-bool AARCharacter::ApplyGameplayEffectToSelf(TSubclassOf<UGameplayEffect> Effect, FGameplayEffectContextHandle InEffectContext)
-{
-    ARCHECK(GetLocalRole() == ROLE_Authority, false);
-    ARCHECK(Effect.Get(), false);
-
-    FGameplayEffectSpecHandle SpecHandle = AbilitySystemComponent->MakeOutgoingSpec(Effect, 1, InEffectContext);
-    ARCHECK(SpecHandle.IsValid(), false);
-
-    FActiveGameplayEffectHandle ActiveGEHandle = AbilitySystemComponent->ApplyGameplayEffectSpecToSelf(*SpecHandle.Data.Get());
-
-    return ActiveGEHandle.WasSuccessfullyApplied();
-}
-
-bool AARCharacter::ApplyGameplayEffectToSelf(TSubclassOf<UGameplayEffect> Effect, UObject* NewSourceObject)
-{
-    ARCHECK(GetLocalRole() == ROLE_Authority, false);
-	ARCHECK(Effect.Get(), false);
-
-    NewSourceObject = (NewSourceObject == nullptr) ? this : NewSourceObject;
-
-    FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-    EffectContext.AddSourceObject(NewSourceObject);
-
-	return ApplyGameplayEffectToSelf(Effect, EffectContext);
-}
-
-bool AARCharacter::ApplyGameplayEffectToSelf(TArray<TSubclassOf<UGameplayEffect>> Effects, UObject* NewSourceObject)
-{
-    ARCHECK(GetLocalRole() == ROLE_Authority, false);
-    for (auto Effect : Effects) ARCHECK(Effect.Get(), false);
-
-    NewSourceObject = (NewSourceObject == nullptr) ? this : NewSourceObject;
-
-    FGameplayEffectContextHandle EffectContext = AbilitySystemComponent->MakeEffectContext();
-    EffectContext.AddSourceObject(NewSourceObject);
-
-    bool bResult = true;
-
-    for (auto Effect : Effects)
+    else
     {
-        bResult &= ApplyGameplayEffectToSelf(Effect, EffectContext);
+        OnDamaged.Broadcast(DamageCauser);
     }
 
-    return bResult;
+    return FinalDamage;
 }
 
-FARActorData AARCharacter::GetActorData() const
+void AARCharacter::SetState(EARCharacterState NewState)
 {
-	return ActorData;
-}
+    ARCHECK(State != NewState);
 
-void AARCharacter::SetActorData(const FARActorData& InActorData)
-{
-	ActorData = InActorData;
-
-	InitFromActorData(ActorData);
-}
-
-void AARCharacter::OnRep_ActorData()
-{
-	InitFromActorData(ActorData, true);
-}
-
-void AARCharacter::InitFromActorData(const FARActorData& InActorData, bool bFromReplication)
-{
-
-}
-
-void AARCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
-{
-	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-
-	DOREPLIFETIME(AARCharacter, ActorData);
+    EARCharacterState OldState = State;
+    // 상태 변경 델리게이트 발동
+    OnStateChanged.Broadcast(OldState, State = NewState);
 }
